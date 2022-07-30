@@ -11,8 +11,31 @@ const MIC_LEVEL_NORMALIZATION = {
 };
 const RANDOMIZE_VALUE_MAX_TIMEOUT = 1500;
 
+interface ITestMergedBooleanValue {
+  isTrue: boolean;
+  // the unique IDs assigned to the observable that
+  // caused this to evaluate to true, if any
+  isTrueObservableIds: string[];
+}
+interface ITestBoolean {
+  // the unique ID assigned to an observable
+  observableId: string;
+  // boolean value of the observable
+  isTrue: boolean;
+}
+interface ITestNumber {
+  // the unique ID assigned to an observable
+  observableId: string;
+  // current value of the observable
+  value: number;
+}
+
 function App() {
-  const [isTrue, setIsTrue] = useState(false);
+  const [mergedTestValue, setMergedTestValue] =
+    useState<ITestMergedBooleanValue>({
+      isTrue: false,
+      isTrueObservableIds: [],
+    });
 
   // Listen to three distinct boolean observables and check if any single
   // value is true. If the value has changed from the previous boolean,
@@ -20,87 +43,131 @@ function App() {
   useEffect(() => {
     // Our first two observables will have the same logic, but will yield separate
     // values in each. This callback will randomly change the observable to true/false.
-    const onBooleanSubscriber: ZenObservable.Subscriber<boolean> = (
-      observer
-    ) => {
-      // Push a weighted random true/false value through the observer
-      const setRandomValue = () => {
-        // 20% chance of evaluating to true
-        let value = Math.random() > 0.8;
-        observer.next(value);
-      };
-      // Recursively set a new timer
-      let timer: number | undefined;
-      const processTimer = () => {
-        timer = setTimeout(() => {
-          setRandomValue();
-          processTimer();
-        }, Math.random() * RANDOMIZE_VALUE_MAX_TIMEOUT);
-      };
-      processTimer();
+    const getOnBooleanSubscriber = (
+      observableId: string,
+      probabilityBetweenZeroAndOne: number
+    ): ZenObservable.Subscriber<ITestBoolean> => {
+      const onBooleanSubscriber: ZenObservable.Subscriber<ITestBoolean> = (
+        observer
+      ) => {
+        // Push a weighted random true/false value through the observer
+        const setRandomValue = () => {
+          // 20% chance of evaluating to true
+          let isTrue = Math.random() > probabilityBetweenZeroAndOne;
+          observer.next({
+            observableId,
+            isTrue,
+          });
+        };
+        // Recursively set a new timer
+        let timer: number | undefined;
+        const processTimer = () => {
+          timer = setTimeout(() => {
+            setRandomValue();
+            processTimer();
+          }, Math.random() * RANDOMIZE_VALUE_MAX_TIMEOUT);
+        };
+        processTimer();
 
-      // On unsubscription, cancel the timer
-      return () => clearTimeout(timer);
+        // On unsubscription, cancel the timer
+        return () => clearTimeout(timer);
+      };
+      return onBooleanSubscriber;
     };
 
-    const observable1 = new Observable<boolean>(onBooleanSubscriber);
+    const observable1 = new Observable<ITestBoolean>(
+      getOnBooleanSubscriber("OBSERVABLE-1", 0.5)
+    );
 
-    const observable2 = new Observable<boolean>(onBooleanSubscriber);
+    const observable2 = new Observable<ITestBoolean>(
+      getOnBooleanSubscriber("OBSERVABLE-2", 0.8)
+    );
 
     // This third observable works differently. It will randomly set a value
     // between 0 and 100, and test to see if the number has changed drastically
     // from the previous one, evaluating to true/false
     let previousNumericValue: number = 0;
-    const observable3 = new Observable<number>((observer) => {
-      let value: number = 0;
+    const getOnNumberEvaluateSubscriber = (
+      observableId: string
+    ): ZenObservable.Subscriber<ITestNumber> => {
+      const onNumberSubscriber: ZenObservable.Subscriber<ITestNumber> = (
+        observer
+      ) => {
+        let value: number = 0;
 
-      const setRandomValue = () => {
-        // Set a random mic level
-        value = Math.random() * 100;
-        observer.next(value);
+        const setRandomValue = () => {
+          // Set a random mic level
+          value = Math.random() * 100;
+          observer.next({
+            observableId,
+            value: value,
+          });
+        };
+
+        // Recursively set a new timer
+        let timer: number | undefined;
+        const processTimer = () => {
+          timer = setTimeout(() => {
+            setRandomValue();
+            processTimer();
+          }, Math.random() * RANDOMIZE_VALUE_MAX_TIMEOUT);
+        };
+        processTimer();
+
+        // On unsubscription, cancel the timer
+        return () => clearTimeout(timer);
       };
+      return onNumberSubscriber;
+    };
 
-      // Recursively set a new timer
-      let timer: number | undefined;
-      const processTimer = () => {
-        timer = setTimeout(() => {
-          setRandomValue();
-          processTimer();
-        }, Math.random() * RANDOMIZE_VALUE_MAX_TIMEOUT);
-      };
-      processTimer();
-
-      // On unsubscription, cancel the timer
-      return () => clearTimeout(timer);
-    }).map((value) => {
+    const observable3: Observable<ITestBoolean> = new Observable<ITestNumber>(
+      getOnNumberEvaluateSubscriber("OBSERVABLE-3")
+    ).map((testNumber): ITestBoolean => {
       if (
-        value > previousNumericValue &&
-        ((previousNumericValue / value) * MIC_LEVEL_NORMALIZATION.FACTOR >=
+        testNumber.value > previousNumericValue &&
+        ((previousNumericValue / testNumber.value) *
+          MIC_LEVEL_NORMALIZATION.FACTOR >=
           MIC_LEVEL_NORMALIZATION.FLOOR ||
           previousNumericValue === 0)
       ) {
-        previousNumericValue = value;
-        return true;
+        previousNumericValue = testNumber.value;
+        return {
+          observableId: testNumber.observableId,
+          isTrue: true,
+        };
       } else if (
-        value < previousNumericValue &&
-        (value / previousNumericValue) * MIC_LEVEL_NORMALIZATION.FACTOR <=
+        testNumber.value < previousNumericValue &&
+        (testNumber.value / previousNumericValue) *
+          MIC_LEVEL_NORMALIZATION.FACTOR <=
           MIC_LEVEL_NORMALIZATION.CEILING
       ) {
-        previousNumericValue = value;
-        return false;
+        previousNumericValue = testNumber.value;
+        return {
+          observableId: testNumber.observableId,
+          isTrue: false,
+        };
       }
-      return false;
+      return {
+        observableId: testNumber.observableId,
+        isTrue: false,
+      };
     });
 
     // Subscribe to changes to the latest of each
     let previousValue = false;
     const observable = combineLatest(observable1, observable2, observable3);
     const subscription = observable.subscribe((latest) => {
-      const latestIsTrue = latest.includes(true);
+      const trueTestValues = latest.filter((testValue) => testValue.isTrue);
+      const latestIsTrue = trueTestValues.length > 0;
       if (latestIsTrue !== previousValue) {
         console.log("new value", latestIsTrue);
         previousValue = latestIsTrue;
-        setIsTrue(latestIsTrue);
+        setMergedTestValue({
+          isTrue: latestIsTrue,
+          isTrueObservableIds: trueTestValues.map(
+            (testValue) => testValue.observableId
+          ),
+        });
       }
     });
     return () => {
@@ -119,7 +186,13 @@ function App() {
         </a>
       </div>
       <h1>Latest observable</h1>
-      <p className="read-the-docs">{`${isTrue}`}</p>
+      <p className="read-the-docs">{`${mergedTestValue.isTrue}`}</p>
+      <h3>True observable IDs</h3>
+      {mergedTestValue.isTrueObservableIds.map((observableId) => (
+        <p className="read-the-docs" key={observableId}>
+          {observableId}
+        </p>
+      ))}
     </div>
   );
 }
