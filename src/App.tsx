@@ -14,12 +14,18 @@ const RANDOMIZE_VALUE_MAX_TIMEOUT = 1500;
 function App() {
   const [isTrue, setIsTrue] = useState(false);
 
+  // Listen to three distinct boolean observables and check if any single
+  // value is true. If the value has changed from the previous boolean,
+  // we set isTrue to the new value and console log.
   useEffect(() => {
-    let previousValue3: number = 0;
-
-    const observable1 = new Observable<boolean>((observer) => {
+    // Our first two observables will have the same logic, but will yield separate
+    // values in each. This callback will randomly change the observable to true/false.
+    const onBooleanSubscriber: ZenObservable.Subscriber<boolean> = (
+      observer
+    ) => {
+      // Push a weighted random true/false value through the observer
       const setRandomValue = () => {
-        // 20% chance of evaluating to true;
+        // 20% chance of evaluating to true
         let value = Math.random() > 0.8;
         observer.next(value);
       };
@@ -35,28 +41,16 @@ function App() {
 
       // On unsubscription, cancel the timer
       return () => clearTimeout(timer);
-    });
+    };
 
-    const observable2 = new Observable<boolean>((observer) => {
-      const setRandomValue = () => {
-        // 20% chance of evaluating to true;
-        let value = Math.random() > 0.8;
-        observer.next(value);
-      };
-      // Recursively set a new timer
-      let timer: number | undefined;
-      const processTimer = () => {
-        timer = setTimeout(() => {
-          setRandomValue();
-          processTimer();
-        }, Math.random() * RANDOMIZE_VALUE_MAX_TIMEOUT);
-      };
-      processTimer();
+    const observable1 = new Observable<boolean>(onBooleanSubscriber);
 
-      // On unsubscription, cancel the timer
-      return () => clearTimeout(timer);
-    });
+    const observable2 = new Observable<boolean>(onBooleanSubscriber);
 
+    // This third observable works differently. It will randomly set a value
+    // between 0 and 100, and test to see if the number has changed drastically
+    // from the previous one, evaluating to true/false
+    let previousNumericValue: number = 0;
     const observable3 = new Observable<number>((observer) => {
       let value: number = 0;
 
@@ -80,25 +74,25 @@ function App() {
       return () => clearTimeout(timer);
     }).map((value) => {
       if (
-        value > previousValue3 &&
-        ((previousValue3 / value) * MIC_LEVEL_NORMALIZATION.FACTOR >=
+        value > previousNumericValue &&
+        ((previousNumericValue / value) * MIC_LEVEL_NORMALIZATION.FACTOR >=
           MIC_LEVEL_NORMALIZATION.FLOOR ||
-          previousValue3 === 0)
+          previousNumericValue === 0)
       ) {
-        previousValue3 = value;
+        previousNumericValue = value;
         return true;
       } else if (
-        value < previousValue3 &&
-        (value / previousValue3) * MIC_LEVEL_NORMALIZATION.FACTOR <=
+        value < previousNumericValue &&
+        (value / previousNumericValue) * MIC_LEVEL_NORMALIZATION.FACTOR <=
           MIC_LEVEL_NORMALIZATION.CEILING
       ) {
-        previousValue3 = value;
+        previousNumericValue = value;
         return false;
       }
       return false;
     });
 
-    // subscribe to changes to the latest of each
+    // Subscribe to changes to the latest of each
     let previousValue = false;
     const observable = combineLatest(observable1, observable2, observable3);
     const subscription = observable.subscribe((latest) => {
