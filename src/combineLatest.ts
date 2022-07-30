@@ -29,8 +29,6 @@ export function combineLatest<S>(...sources: Observable<S>[]): Observable<S[]> {
                               seenAll = true;
                           }
                           const nextValues = Array.from(values) as S[];
-                  
-                          
                           observer.next(nextValues);
                       },
                       error(e) {
