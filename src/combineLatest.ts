@@ -36,11 +36,11 @@ export function combineLatest<S>(...sources: Observable<S>[]): Observable<S[]> {
                       error(e) {
                           observer.error(e);
                       },
-                    //   complete() {
-                    //       if (--count === 0) {
-                    //           observer.complete();
-                    //       }
-                    //   },
+                      complete() {
+                          if (--count === 0) {
+                              observer.complete();
+                          }
+                      },
                   });
           });
         return () => subscriptions.forEach(s => s.unsubscribe());
