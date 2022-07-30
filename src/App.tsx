@@ -4,7 +4,7 @@ import reactLogo from "./assets/react.svg";
 import "./App.css";
 import { combineLatest } from "./combineLatest";
 
-const MIC_LEVEL_NORMALIZATION = {
+const NUMBER_LEVEL_NORMALIZATION = {
   FACTOR: 100,
   FLOOR: 10,
   CEILING: 20,
@@ -126,8 +126,8 @@ function App() {
       if (
         testNumber.value > previousNumericValue &&
         ((previousNumericValue / testNumber.value) *
-          MIC_LEVEL_NORMALIZATION.FACTOR >=
-          MIC_LEVEL_NORMALIZATION.FLOOR ||
+          NUMBER_LEVEL_NORMALIZATION.FACTOR >=
+          NUMBER_LEVEL_NORMALIZATION.FLOOR ||
           previousNumericValue === 0)
       ) {
         previousNumericValue = testNumber.value;
@@ -138,8 +138,8 @@ function App() {
       } else if (
         testNumber.value < previousNumericValue &&
         (testNumber.value / previousNumericValue) *
-          MIC_LEVEL_NORMALIZATION.FACTOR <=
-          MIC_LEVEL_NORMALIZATION.CEILING
+          NUMBER_LEVEL_NORMALIZATION.FACTOR <=
+          NUMBER_LEVEL_NORMALIZATION.CEILING
       ) {
         previousNumericValue = testNumber.value;
         return {
